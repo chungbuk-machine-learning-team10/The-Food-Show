@@ -1,0 +1,15 @@
+import urllib.request
+from bs4 import BeautifulSoup
+
+list = ['cup-cakes', 'donuts', 'french-fries', 'gyoza', 'hamberger', 'ice-cream', 'macarons', 'pizza', 'ramen',
+'risotto', 'sandwich', 'spaghetti-bolognese', 'spaghetti carbonara', 'sushi', 'takoyaki', 'tiramisu', 'waffles']
+
+for i in list : 
+    url = "https://www.myfitnesspal.com/ko/nutrition-facts-calories/" + str(i) + "/"
+    req = urllib.request.urlopen(url)
+    res = req.read()
+    soup = BeautifulSoup(res,'html.parser') # BeautifulSoup 객체생성
+    calory_keywords = soup.find_all('div',class_='jss14') # 데이터에서 태그와 클래스를 찾는 함수
+    calory_keywords = [each_line.get_text().strip() for each_line in calory_keywords[:1]]
+    print(str(i) + "의 일인분 열량과 영양소입니다")
+    print(calory_keywords)
