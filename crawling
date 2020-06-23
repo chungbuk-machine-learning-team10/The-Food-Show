@@ -1,0 +1,21 @@
+# 칼로리 및 영양정보를 제공하는 웹사이트로부터 크롤링을하여 데이터를 가져옴.
+import urllib.request
+from bs4 import BeautifulSoup
+
+## 음식_list
+list = ['cup-cakes', 'donuts', 'french-fries', 'gyoza', 'hamberger', 'ice-cream', 'macarons', 'pizza', 'ramen',
+             'risotto', 'sandwich', 'spaghetti-bolognese', 'spaghetti-carbonara', 'sushi', 'takoyaki', 'tiramisu', 'waffles']
+food_dict = {}
+
+for food in list:
+    url = "https://www.myfitnesspal.com/ko/nutrition-facts-calories/" + str(food) + "/"
+    req = urllib.request.urlopen(url)
+    res = req.read()
+    soup = BeautifulSoup(res,'html.parser') # BeautifulSoup 객체생성
+    calory_keywords = soup.find_all('div',class_='jss14') # 데이터에서 태그와 클래스를 찾는 함수
+    calory_keywords = [each_line.get_text().strip() for each_line in calory_keywords[:1]]
+
+    food_dict[food] = calory_keywords[0]
+    print(food + '의 칼로리와 영양정보를 가져옵니다. \n', food_dict[food])
+
+print('\n food와 칼로리 및 영양정보를 딕셔너리 형태로 만듭니다. \n', food_dict)
