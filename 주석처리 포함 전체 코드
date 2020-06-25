@@ -1,0 +1,398 @@
+## 이미지 분류 순서 : 모델 구성 -> 모델 훈련 -> 예측
+
+## train 시킬 모델 구성하는 작업 : 정연휘
+from PIL import Image
+import os, glob, numpy as np
+from sklearn.model_selection import train_test_split
+
+caltech_dir = "C:/data/project/train/"
+categories = ['cup-cakes', 'donuts', 'french-fries', 'gyoza', 'hamberger', 'ice-cream', 'macarons', 'pizza', 'ramen',
+              'risotto', 'sandwich', 'spaghetti-bolognese', 'spaghetti-carbonara', 'sushi', 'takoyaki', 'tiramisu', 'waffles']
+nb_classes = len(categories)
+print(nb_classes)
+print(type(nb_classes))
+
+## 카테고리 별로 돌면서 label을 0으로 초기화
+image_w = 64
+image_h = 64
+
+pixels = image_h * image_w * 3
+
+X = []
+y = []
+
+for idx, cat in enumerate(categories):
+    
+    #one-hot 돌리기.
+    label = [0 for i in range(nb_classes)]
+    label[idx] = 1
+
+    image_dir = caltech_dir + "/" + cat
+    files = glob.glob(image_dir+"/*.jpg")
+    print(cat, " 파일 길이 : ", len(files))
+    for i, f in enumerate(files):
+        img = Image.open(f)
+        img = img.convert("RGB")
+        img = img.resize((image_w, image_h))
+        data = np.asarray(img)
+
+        X.append(data)
+        y.append(label)
+
+        if i % 700 == 0:
+            print(cat, " : ", f)
+            
+X = np.array(X)
+y = np.array(y)
+#1 0 0 0 이면 음식이름1
+#0 1 0 0 이면 음식이름2 이런식
+
+# numpy 라이브러리를 이용하여 저장 : 이태희
+X_train, X_test, y_train, y_test = train_test_split(X, y)
+xy = (X_train, X_test, y_train, y_test)
+np.save("C:/data/project/multi_image_data.npy", xy)
+"C:\data\project"
+
+print("ok", len(y))
+
+import os, glob, numpy as np
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+import matplotlib.pyplot as plt
+import keras.backend.tensorflow_backend as K
+import tensorflow as tf
+
+## tensorflow의 특성상 모든 gpu 메모리를 할당받은 후 이용하기 때문에 메모리 낭비 심함
+## allow_groth 옵션을 통해 작은 메모리에서 큰 메모리로 사용량에 따라 늘려가게 함
+config = tf.compat.v1.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.compat.v1.Session(config=config)
+
+## numpy를 불러와서 train시키게 함
+X_train, X_test, y_train, y_test = np.load("C:/data/project/multi_image_data.npy", allow_pickle=True)
+print(X_train.shape)
+print(X_train.shape[0])
+
+categories = ['cup-cakes', 'donuts', 'french-fries', 'gyoza', 'hamberger', 'ice-cream', 'macarons', 'pizza', 'ramen',
+              'risotto', 'sandwich', 'spaghetti-bolognese', 'spaghetti-carbonara', 'sushi', 'takoyaki', 'tiramisu', 'waffles']
+nb_classes = len(categories)
+
+# 데이터 타입을 일반화 시키기
+X_train = X_train.astype(float) / 255
+X_test = X_test.astype(float) / 255
+
+## 신경망 만들기 : 이태희, 정연휘
+with K.tf_ops.device('/device:GPU:0'):
+    model = Sequential()
+    model.add(Conv2D(32, (3,3), padding="same", input_shape=X_train.shape[1:], activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+    model.add(Dropout(0.25))
+    
+    model.add(Conv2D(64, (3,3), padding="same", activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+    model.add(Dropout(0.25))
+    
+    model.add(Flatten())
+    model.add(Dense(256, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(17, activation='softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model_dir = './model'
+    
+    if not os.path.exists(model_dir):
+        os.mkdir(model_dir)
+    
+    model_path = model_dir + '/multi_img_classification.model'
+    checkpoint = ModelCheckpoint(filepath=model_path , monitor='val_loss', verbose=1, save_best_only=True)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=6)
+    
+    
+## 모델 요약
+model.summary()
+
+## GUI를 위해 학습 모델 저장 : 이태희
+history = model.fit(X_train, y_train, batch_size=32, epochs=50, validation_data=(X_test, y_test), callbacks=[checkpoint, early_stopping])
+model.save('C:/data/project/train/food_model.h5')
+
+
+from tkinter import *
+from tkinter.simpledialog import *
+from tkinter.filedialog import *
+from PIL import Image, ImageFilter
+import cv2, sys
+from matplotlib import pyplot as plt
+import numpy as np
+import os
+#from os import listdirw
+from os.path import isfile, join
+
+labels = []
+
+## 음식을 입력받을 때마다 초기화 : 정연휘
+def destroy_all_labels():
+    global window, widgets
+
+    for label in labels:
+        label.pack_forget()
+
+    window.imageList = []
+    widgets = []
+
+## GUI화면 상에서 사용자가 입력한 사진 출력 : 이태희
+def displayImage(image, width, height) :
+    global window, canvas, paper, photo, photo2, oriX, oriY
+
+    paper = PhotoImage(width = width, height = height)
+    canvas.create_image((width, height / 2), image = paper)
+    rgbString = ""
+    rgbImage = image.convert('RGB')
+    
+    for i in range(0, height) : 
+        tmpString = ""
+        for k in range(0, width) : 
+            r,g,b = rgbImage.getpixel((k,i))
+            tmpString += "#%02x%02x%02x " % (r,g,b) # x 뒤에 한칸 공백
+        rgbString += "{" + tmpString +  "} " # } 뒤에 한칸 공백
+    
+    paper.put(rgbString)
+    
+
+    canvas.config(width = width * 2, height = height)
+
+## 사용자로부터 모든 그림 파일들을 불러올 수 있도록 함 : 정연휘
+def open() :
+    global window, canvas, paper, photo, photo2, oriX, oriY, readFp, trim_path,  width, height
+    
+    readFp = askopenfilename(parent = window, filetypes = (("모든 그림 파일", "*.jpg; *.jpeg; *.bmp; *.png; *tif; *.gif"),
+                                                          ("모든 파일","*.*")))
+    destroy_all_labels()
+    
+    image_path = readFp
+    
+    ## 사진 경로에 한글이 끼더라도 오류 없이 작동할 수 있도록 함 : 이태희
+    image = cv2.imdecode(np.fromfile(image_path, np.uint8), cv2.IMREAD_COLOR)
+    image_gray = cv2.imdecode(np.fromfile(image_path, np.uint8), cv2.IMREAD_GRAYSCALE)
+
+    b,g,r = cv2.split(image)
+    image2 = cv2.merge([r,g,b])
+
+    blur = cv2.GaussianBlur(image_gray, ksize=(1,1), sigmaX=0)
+    ret, thresh1 = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
+
+    edged = cv2.Canny(blur, 10, 250)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7,7))
+    closed = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(closed.copy(),cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    total = 0
+
+    contours_xy = np.array(contours)
+    contours_xy.shape
+
+    # x의 min과 max 찾기
+    x_min, x_max = 0,0
+    value = list()
+    for i in range(len(contours_xy)):
+        for j in range(len(contours_xy[i])):
+            value.append(contours_xy[i][j][0][0])
+            x_min = min(value)
+            x_max = max(value)
+#     print(x_min)
+#     print(x_max)
+ 
+    # y의 min과 max 찾기
+    y_min, y_max = 0,0
+    value = list()
+    for i in range(len(contours_xy)):
+        for j in range(len(contours_xy[i])):
+            value.append(contours_xy[i][j][0][1])
+            y_min = min(value)
+            y_max = max(value)
+
+    # image trim 하기
+    x = x_min
+    y = y_min
+    w = x_max-x_min
+    h = y_max-y_min
+    readFp2 = readFp.split('/')
+    readFp3 = readFp2.pop()
+    readFp4 = '/'.join(readFp2) + '/'
+    
+    trim_path = readFp4 + "org_trim.jpg"
+    
+    img_trim = image[y:y+h, x:x+w]
+    cv2.imwrite(readFp4 + "org_trim" + ".jpg", img_trim)
+    org_image = cv2.imread(readFp4 + "org_trim" + ".jpg")
+    
+    photo = Image.open(trim_path).convert("RGB")
+    oriX = photo.width
+    oriY = photo.height
+    
+    photo2 = photo.copy()
+    
+    newX = photo2.width
+    newY = photo2.height
+    
+    displayImage(photo2, newX, newY)
+
+def exit() : 
+    window.quit()
+    window.destroy()
+
+## 음식 확인하는 함수 : 정연휘    
+def foodcheck() : 
+    Text = Label(window, text = '음식을 확인해주세요')
+    Text.pack(padx = 5, pady = 5)
+    labels.append(Text)
+    
+    from PIL import Image
+    import os, glob, numpy as np
+    from keras.models import load_model
+    
+    categories = ['cup-cakes', 'donuts', 'french-fries', 'gyoza', 'hamberger', 'ice-cream', 'macarons', 'pizza', 'ramen',
+              'risotto', 'sandwich', 'spaghetti-bolognese', 'spaghetti-carbonara', 'sushi', 'takoyaki', 'tiramisu', 'waffles']
+
+    image_w = 64
+    image_h = 64
+
+    pixels = image_h * image_w * 3
+
+    X = []
+    filenames = []
+    img = Image.open(trim_path)
+    img = img.convert("RGB")
+    img = img.resize((image_w, image_h))
+    data = np.asarray(img)
+    filenames.append(readFp)
+    X.append(data)
+
+    ## 학습한 모델을 불러와 쫌 더 빠르게 GUI화면 상에서 접근 : 이태희
+    X = np.array(X)
+    model = load_model('C:/data/project/train/food_model.h5')
+
+    prediction = model.predict(X)
+    np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
+
+    #이 비교는 그냥 파일들이 있으면 해당 파일과 비교. 카테고리와 함께 비교해서 진행
+        global pre_ans_str
+        pre_ans = i.argmax()  # 예측 레이블
+        print(i)
+        print(pre_ans)
+        pre_ans_str = ''
+
+        for a in range(0, 17, 1) :
+            if pre_ans == a :
+                pre_ans_str = categories[a]
+                filename = filenames[0].split("/")
+                
+                Text = Label(window, text = "해당 "+ filename[len(filename)-1]+"이미지는 "+pre_ans_str+"로 추정됩니다.")
+                Text.pack(padx = 5, pady = 5)
+                labels.append(Text)
+        
+def foodinfoinput() : 
+    Text = Label(window, text = "양이나 개수를 알려주세요")
+    Text.pack(side = 'top', padx = 5, pady = 5)
+    labels.append(Text)
+    
+    global amount
+    amount = askinteger("양이나 개수", "양이나 개수를 입력하세요 (1~50)" ,minvalue = 1, maxvalue = 50)
+    
+    Text2 = Label(window, text = str(amount) + "양을(개수를) 입력하셨습니다")
+    Text2.pack(side = 'top', padx = 5, pady = 5)
+    labels.append(Text2)
+
+## 크롤링한 정보를 나타내는 함수 : 정연휘
+def information() : 
+    Text1 = Label(window, text = "한 조각이나 일 인분 기준을 먼저 보여드리겠습니다")
+    Text1.pack(padx = 5, pady = 5)
+    labels.append(Text1)
+    
+    import urllib.request
+    from bs4 import BeautifulSoup
+    import re
+
+    list = ['cup-cakes', 'donuts', 'french-fries', 'gyoza', 'hamberger', 'ice-cream', 'macarons', 'pizza', 'ramen',
+                 'risotto', 'sandwich', 'spaghetti-bolognese', 'spaghetti-carbonara', 'sushi', 'takoyaki', 'tiramisu', 'waffles']
+    food_dict = {}
+
+    for food in list:
+        food_dict
+        url = "https://www.myfitnesspal.com/ko/nutrition-facts-calories/" + str(food) + "/"
+        req = urllib.request.urlopen(url)
+        res = req.read()
+        soup = BeautifulSoup(res,'html.parser') # BeautifulSoup 객체생성
+        calory_keywords = soup.find_all('div',class_='jss14') # 데이터에서 태그와 클래스를 찾는 함수
+        calory_keywords = [each_line.get_text().strip() for each_line in calory_keywords[:1]]
+
+        food_dict[food] = calory_keywords[0]
+    
+    Text = Label(window, text = food_dict[pre_ans_str])
+    Text.pack(padx = 5, pady = 5)
+    labels.append(Text)
+    
+    ## 입력한 양에 따라서 크롤링된 것숫자만을 가지고 와서 계산 : 이태희
+    Text2 = Label(window, text = "입력하신 양에 따른 열량과 영양소입니다" )
+    Text2.pack(padx = 5, pady = 5)
+    labels.append(Text2)
+    
+    info = str(food_dict[pre_ans_str])
+    info_num = re.findall('\d+', info )
+
+    num_list = []
+    for i in info_num:
+        j = int(i)
+        num_list.append(j*amount)
+    
+    Text3 = Label(window, text = "칼로리: " + str(num_list[0]) + " •탄수화물: " + str(num_list[1]) +
+                  "g •지방: " + str(num_list[2]) + "g •단백질: " + str(num_list[3]) + "g")
+    Text3.pack(padx = 5, pady = 5)
+    labels.append(Text3)
+    
+    
+    
+if __name__ == "__main__" : 
+    window = Tk()
+ 
+    window.title("머신는_러닝머신")
+    window.geometry()
+    window.resizable(True, True)
+    
+    ## 화면 크기를 위하여 스크롤바 생성 : 이태희
+    canvas = Canvas(window, bg = '#FFFFFF', scrollregion = (0,0,400,400))
+    
+    vbar = Scrollbar(window,orient = VERTICAL)
+    vbar.pack(side = 'right',fill = Y)
+    vbar.config(command = canvas.yview)
+
+    canvas.config(yscrollcommand = vbar.set)
+    canvas.pack(side = 'bottom',expand = True,fill = 'both')
+ 
+    first = Label(window, text = "The Food Show", font = ("나눔고딕코딩", 30, 'bold'))
+    first.pack()
+
+    second = Label(window, text = "이태희, 정연휘", font = ("나눔고딕코딩", 10, 'bold')).place(x=900, y = 50)
+    
+    ## GUI 화면 구성 : 정연휘
+    
+    
+    mainMenu = Menu(window)
+    window.config(menu = mainMenu)
+    
+    fileMenu = Menu(mainMenu)
+    mainMenu.add_cascade(label = "파일", menu = fileMenu)
+    fileMenu.add_command(label = "파일 열기", command = open)
+    fileMenu.add_separator()
+    fileMenu.add_command(label = "종료", command = exit)
+
+    checkMenu = Menu(mainMenu)
+    mainMenu.add_cascade(label = "음식 확인하기", menu = checkMenu)
+    checkMenu.add_command(label = "음식 확인하기", command = foodcheck)
+    checkMenu.add_command(label = "음식 정보 입력하기", command = foodinfoinput)
+    
+    informationMenu = Menu(mainMenu)
+    mainMenu.add_cascade(label = "음식 영양소와 칼로리 확인하기", menu = informationMenu)
+    informationMenu.add_command(label = "음식 영양소와 칼로리 확인하기", command = information)
+    
+    window.mainloop()
