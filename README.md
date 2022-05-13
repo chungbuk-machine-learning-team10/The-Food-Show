@@ -17,7 +17,7 @@
 
 | python                        | BeautifulSoup                               | keras                       | matplotlib                            | tensorflow                            |
 | ----------------------------- | ------------------------------------------- | --------------------------- | ------------------------------------- | ------------------------------------- |
-| [!python](./stack/python.png) | [!BeautifulSoup](./stack/BeautifulSoup.png) | [!keras](./stack/keras.jpg) | [!matplotlib](./stack/matplotlib.png) | [!tensorflow](./stack/tensorflow.png) |
+| ![python](./stack/python.png) | ![BeautifulSoup](./stack/BeautifulSoup.png) | ![keras](./stack/keras.jpg) | ![matplotlib](./stack/matplotlib.png) | ![tensorflow](./stack/tensorflow.png) |
 
 ## 배운 점 & 아쉬운 점
 
